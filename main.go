@@ -27,8 +27,15 @@ type config struct {
 	cache *pokecache.Cache
 }
 
+type location_batch struct {
+	Next     string
+	Previous string
+	Results  []location_area
+}
+
 type location_area struct {
 	Name string
+	Url  string
 }
 
 func generateRegistery() map[string]cliCommand {
@@ -61,7 +68,7 @@ func main() {
 	regi := generateRegistery()
 	c := config{
 		prev:  "",
-		next:  "https://pokeapi.co/api/v2/location-area/1/",
+		next:  "https://pokeapi.co/api/v2/location-area/",
 		cache: pokecache.NewCache(20 * time.Second),
 	}
 	scanner := bufio.NewScanner(os.Stdin)
@@ -120,72 +127,58 @@ func commandMapb(c *config) error {
 	re := regexp.MustCompile("[0-9]+") //find digits
 	numbers := re.FindAllString(c.next, -1)
 
-	URLresource, err := strconv.Atoi(numbers[len(numbers)-1]) //turns the last digit found into an int for use
+	offset := numbers[len(numbers)-2] //finds the offset to be used for the previous page
+	offset_int, err := strconv.Atoi(offset)
 	if err != nil {
 		return fmt.Errorf("error parsing int: %w", err)
 	}
 
-	if URLresource < 40 {
-		c.prev = ""
-		c.next = "https://pokeapi.co/api/v2/location-area/1/"
-		fmt.Println("you're on the first page")
-		return nil
-	}
-	c.next = fmt.Sprintf("https://pokeapi.co/api/v2/location-area/%s/", strconv.Itoa(URLresource-40))
+	c.next = c.prev
+	c.prev = fmt.Sprintf("https://pokeapi.co/api/v2/location-area?offset=%s&limit=20", strconv.Itoa(offset_int-40))
 	commandMap(c)
 	return nil
 }
 
 func commandMap(c *config) error {
 
-	re := regexp.MustCompile("[0-9]+") //find digits
-	numbers := re.FindAllString(c.next, -1)
+	var loc_batch location_batch
+	loc_batch.Results = make([]location_area, 20)
 
-	URLresourceIndex, err := strconv.Atoi(numbers[len(numbers)-1]) //turns the last digit found into an int for use
+	if val, ok := c.cache.Get(c.next); ok { //check if url is in cache
+		if err := json.Unmarshal(val, &loc_batch); err != nil { //grab needed data
+			return fmt.Errorf("error grabbing data: %w", err)
+		}
+
+		for _, loc := range loc_batch.Results {
+			fmt.Println(loc.Name)
+		}
+		fmt.Println("returning a cached result")
+		c.prev = loc_batch.Previous
+		c.next = loc_batch.Next
+		return nil
+	}
+
+	res, err := http.Get(c.next) //get data from the current resourse page
 	if err != nil {
-		return fmt.Errorf("error parsing int: %w", err)
+		return fmt.Errorf("error getting resources: %w", err)
+	}
+	defer res.Body.Close()
+
+	data, err := io.ReadAll(res.Body) //read the data from the response
+	if err != nil {
+		return fmt.Errorf("error reading json: %w", err)
 	}
 
-	baseURL := "https://pokeapi.co/api/v2/location-area"
+	if err = json.Unmarshal(data, &loc_batch); err != nil { //grab needed data
+		return fmt.Errorf("error grabbing data: %w", err)
+	}
 
-	successfulResourcePulls := 0
-	var loc location_area
-	for successfulResourcePulls <= 20 { //print 20 locations starting from c.next
-
-		currentURL := fmt.Sprintf("%s/%d/", baseURL, URLresourceIndex)
-
-		if val, ok := c.cache.Get(currentURL); ok { //check if url is in cache
-			fmt.Println(string(val))
-			URLresourceIndex++
-			continue
-		}
-
-		fmt.Printf("Getting resources from %s...", currentURL)
-		res, err := http.Get(currentURL) //get data from the current resourse page
-		if err != nil {
-			return fmt.Errorf("error getting resources: %w", err)
-		}
-		defer res.Body.Close()
-
-		data, err := io.ReadAll(res.Body) //read the data from the response
-		if err != nil {
-			return fmt.Errorf("error reading json: %w", err)
-		}
-
-		if err = json.Unmarshal(data, &loc); err != nil { //grab needed data
-			//return fmt.Errorf("error grabbing data: %w", err)
-			fmt.Println("Failed to get resources")
-			URLresourceIndex++
-			continue
-		}
+	for _, loc := range loc_batch.Results {
 		fmt.Println(loc.Name)
-		c.cache.Add(currentURL, []byte(loc.Name)) //add location name to cache
-		res.Body.Close()
-		URLresourceIndex++
-		successfulResourcePulls++
 	}
+	c.cache.Add(c.next, data)
 
-	c.prev = c.next //set config for next call to map
-	c.next = fmt.Sprintf("%s/%d/", baseURL, URLresourceIndex)
+	c.prev = loc_batch.Previous
+	c.next = loc_batch.Next
 	return nil
 }
