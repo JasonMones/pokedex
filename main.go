@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
@@ -13,24 +14,13 @@ import (
 type cliCommand struct {
 	name        string
 	description string
-	callback    func(c *config) error
+	callback    func(c *config, args []string) error
 }
 
 type config struct {
 	prev  string
 	next  string
 	cache *pokecache.Cache
-}
-
-type location_batch struct {
-	Next     string
-	Previous string
-	Results  []location_area
-}
-
-type location_area struct {
-	Name string
-	Url  string
 }
 
 func generateRegistery() map[string]cliCommand {
@@ -54,6 +44,11 @@ func generateRegistery() map[string]cliCommand {
 			name:        "mapb",
 			description: "Displays the previous 20 in-game map areas",
 			callback:    commandMapb,
+		},
+		"explore": {
+			name:        "explore",
+			description: "lists the pokemon that can be found in a given area",
+			callback:    commandExplore,
 		},
 	}
 	return registry
@@ -80,7 +75,14 @@ func main() {
 			fmt.Println("Unknown command")
 			continue
 		}
-		err := command.callback(&c)
+
+		if len(input) == 1 { //remove the command from the input
+			input = make([]string, 0)
+		} else {
+			input = slices.Delete(input, 0, 1)
+		}
+
+		err := command.callback(&c, input)
 		if err != nil {
 			fmt.Println(err)
 		}
