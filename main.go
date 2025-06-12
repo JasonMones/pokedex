@@ -18,9 +18,10 @@ type cliCommand struct {
 }
 
 type config struct {
-	prev  string
-	next  string
-	cache *pokecache.Cache
+	prev    string
+	next    string
+	cache   *pokecache.Cache
+	pokedex map[string]pokemon
 }
 
 func generateRegistery() map[string]cliCommand {
@@ -50,6 +51,11 @@ func generateRegistery() map[string]cliCommand {
 			description: "lists the pokemon that can be found in a given area",
 			callback:    commandExplore,
 		},
+		"catch": {
+			name:        "catch",
+			description: "attempt to catch the specified pokemon",
+			callback:    commandCatch,
+		},
 	}
 	return registry
 }
@@ -57,9 +63,10 @@ func generateRegistery() map[string]cliCommand {
 func main() {
 	regi := generateRegistery()
 	c := config{
-		prev:  "",
-		next:  "https://pokeapi.co/api/v2/location-area/",
-		cache: pokecache.NewCache(20 * time.Second),
+		prev:    "",
+		next:    "https://pokeapi.co/api/v2/location-area/",
+		cache:   pokecache.NewCache(20 * time.Second),
+		pokedex: make(map[string]pokemon),
 	}
 	scanner := bufio.NewScanner(os.Stdin)
 	for {

@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"math/rand"
 	"os"
 	"regexp"
 	"strconv"
@@ -30,7 +31,10 @@ type pokemon_encounters struct {
 
 type pokemon struct {
 	Name string
-	Url  string
+}
+
+type pokemon_exp struct {
+	Base_experience int
 }
 
 func commandExit(c *config, args []string) error {
@@ -140,7 +144,6 @@ func commandExplore(c *config, args []string) error {
 		return fmt.Errorf("unspecified leading arguments")
 	}
 	location := args[0]
-	fmt.Println(location)
 
 	var poke_batch pokemon_batch
 	URL := fmt.Sprintf("https://pokeapi.co/api/v2/location-area/%s", location)
@@ -162,5 +165,75 @@ func commandExplore(c *config, args []string) error {
 	c.cache.Add(location, data)
 
 	commandExploreHelper(location, &poke_batch)
+	return nil
+}
+
+func commandCatchHelper(exp int, name string) bool {
+	//calculate whether pokemon is caught or not
+	catchChance := 10 - (3.0 * float64(exp-exp%100) / 100.0)
+	if catchChance == 10 {
+		catchChance = 0.65
+	} else {
+		catchChance = catchChance / 10.0
+	}
+
+	rng := rand.Float64()
+
+	var catch_message string
+	var caught bool
+	if rng > catchChance {
+		catch_message = fmt.Sprintf("%s escaped!", name)
+		caught = false
+	} else {
+		catch_message = fmt.Sprintf("%s was caught!", name)
+		caught = true
+	}
+
+	//print
+	fmt.Printf("Throwing a Pokeball at %s.", name)
+	time.Sleep(500 * time.Millisecond)
+	fmt.Print(".")
+	time.Sleep(500 * time.Millisecond)
+	fmt.Print(".\n")
+	fmt.Println(catch_message)
+	return caught
+}
+
+func commandCatch(c *config, args []string) error {
+	if len(args) == 0 {
+		return fmt.Errorf("required arguments not present")
+	} else if len(args) > 1 {
+		return fmt.Errorf("unspecified leading arguments")
+	}
+	attemptToCatch := args[0]
+
+	var p_exp pokemon_exp
+	URL := fmt.Sprintf("https://pokeapi.co/api/v2/pokemon/%s", attemptToCatch)
+	if data, ok := c.cache.Get(URL); ok { //check if url is in cache
+		if err := json.Unmarshal(data, &p_exp); err != nil { //grab needed data
+			return fmt.Errorf("error grabbing data: %w", err)
+		}
+
+		caught := commandCatchHelper(p_exp.Base_experience, attemptToCatch)
+		if caught {
+			c.pokedex[attemptToCatch] = pokemon{
+				Name: attemptToCatch,
+			}
+		}
+		return nil
+	}
+
+	data, err := UnmarshalFromPokeapi(&p_exp, URL)
+	if err != nil {
+		return err
+	}
+
+	c.cache.Add(attemptToCatch, data)
+	caught := commandCatchHelper(p_exp.Base_experience, attemptToCatch)
+	if caught {
+		c.pokedex[attemptToCatch] = pokemon{
+			Name: attemptToCatch,
+		}
+	}
 	return nil
 }

@@ -21,7 +21,7 @@ func UnmarshalFromPokeapi[T any](s *T, url string) ([]byte, error) {
 	}
 
 	if err = json.Unmarshal(data, s); err != nil { //grab needed data
-		return nil, fmt.Errorf("error grabbing data: %w", err)
+		return nil, fmt.Errorf("command unknown")
 	}
 	return data, nil
 }
