@@ -26,15 +26,32 @@ type pokemon_batch struct {
 }
 
 type pokemon_encounters struct {
-	Pokemon pokemon
+	Pokemon struct {
+		Name string
+	}
 }
 
 type pokemon struct {
+	Base_experience int
+	Pokemon_forms   []forms `json:"forms"`
+	Height          int
+	Pokemon_stats   []stats `json:"stats"`
+	Pokemon_types   []types `json:"types"`
+	Weight          int
+}
+
+type forms struct {
 	Name string
 }
 
-type pokemon_exp struct {
-	Base_experience int
+type stats struct {
+	Base_stat int
+}
+
+type types struct {
+	Pokemon_type struct {
+		Name string
+	} `json:"type"`
 }
 
 func commandExit(c *config, args []string) error {
@@ -207,33 +224,73 @@ func commandCatch(c *config, args []string) error {
 	}
 	attemptToCatch := args[0]
 
-	var p_exp pokemon_exp
-	URL := fmt.Sprintf("https://pokeapi.co/api/v2/pokemon/%s", attemptToCatch)
-	if data, ok := c.cache.Get(URL); ok { //check if url is in cache
-		if err := json.Unmarshal(data, &p_exp); err != nil { //grab needed data
+	var poke pokemon
+	URL := fmt.Sprintf("https://pokeapi.co/api/v2/pokemon/%s", attemptToCatch) //I could create a method for cache grabbing but i dont really wanna
+	if data, ok := c.cache.Get(URL); ok {                                      //check if url is in cache
+		if err := json.Unmarshal(data, &poke); err != nil { //grab needed data
 			return fmt.Errorf("error grabbing data: %w", err)
 		}
 
-		caught := commandCatchHelper(p_exp.Base_experience, attemptToCatch)
+		caught := commandCatchHelper(poke.Base_experience, attemptToCatch)
 		if caught {
-			c.pokedex[attemptToCatch] = pokemon{
-				Name: attemptToCatch,
-			}
+			c.pokedex[attemptToCatch] = poke
 		}
 		return nil
 	}
 
-	data, err := UnmarshalFromPokeapi(&p_exp, URL)
+	data, err := UnmarshalFromPokeapi(&poke, URL)
 	if err != nil {
 		return err
 	}
 
 	c.cache.Add(attemptToCatch, data)
-	caught := commandCatchHelper(p_exp.Base_experience, attemptToCatch)
+	caught := commandCatchHelper(poke.Base_experience, attemptToCatch)
 	if caught {
-		c.pokedex[attemptToCatch] = pokemon{
-			Name: attemptToCatch,
-		}
+		c.pokedex[attemptToCatch] = poke
+	}
+	return nil
+}
+
+func commandInspect(c *config, args []string) error {
+	if len(args) == 0 {
+		return fmt.Errorf("required arguments not present")
+	} else if len(args) > 1 {
+		return fmt.Errorf("unspecified leading arguments")
+	}
+
+	toInspect, ok := c.pokedex[args[0]]
+	if !ok {
+		return fmt.Errorf("you have not caught that pokemon")
+	}
+
+	fmt.Printf("Name: %s\n", toInspect.Pokemon_forms[0].Name)
+	fmt.Printf("Height: %d\n", toInspect.Height)
+	fmt.Printf("Weight: %d\n", toInspect.Weight)
+	fmt.Println("Stats:")
+	fmt.Printf("  -hp: %d\n", toInspect.Pokemon_stats[0].Base_stat)
+	fmt.Printf("  -attack: %d\n", toInspect.Pokemon_stats[1].Base_stat)
+	fmt.Printf("  -defense: %d\n", toInspect.Pokemon_stats[2].Base_stat)
+	fmt.Printf("  -special-attack: %d\n", toInspect.Pokemon_stats[3].Base_stat)
+	fmt.Printf("  -special-defense: %d\n", toInspect.Pokemon_stats[4].Base_stat)
+	fmt.Printf("  -speed: %d\n", toInspect.Pokemon_stats[5].Base_stat)
+	fmt.Println("Types:")
+	for _, t := range toInspect.Pokemon_types {
+		fmt.Printf("  - %s\n", t.Pokemon_type.Name)
+	}
+	return nil
+}
+
+func commandPokedex(c *config, args []string) error {
+	if len(args) > 0 {
+		return fmt.Errorf("unspecified leading arguments")
+	}
+
+	if len(c.pokedex) == 0 {
+		fmt.Println("no pokemon caught yet")
+	}
+
+	for name := range c.pokedex {
+		fmt.Printf(" - %s\n", name)
 	}
 	return nil
 }

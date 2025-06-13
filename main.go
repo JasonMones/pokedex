@@ -56,6 +56,16 @@ func generateRegistery() map[string]cliCommand {
 			description: "attempt to catch the specified pokemon",
 			callback:    commandCatch,
 		},
+		"inspect": {
+			name:        "inspect",
+			description: "look at the stats of any caught pokemon",
+			callback:    commandInspect,
+		},
+		"pokedex": {
+			name:        "pokedex",
+			description: "look at all pokemon caught",
+			callback:    commandPokedex,
+		},
 	}
 	return registry
 }
@@ -72,14 +82,13 @@ func main() {
 	for {
 		fmt.Print("Pokedex > ")
 		scanner.Scan()
-		fmt.Println()
 
 		input := cleanInput(scanner.Text())
 		inputtedCommand := input[0]
 
 		command, exists := regi[inputtedCommand]
 		if !exists {
-			fmt.Println("Unknown command")
+			fmt.Println("unknown command")
 			continue
 		}
 
@@ -93,7 +102,6 @@ func main() {
 		if err != nil {
 			fmt.Println(err)
 		}
-		fmt.Println()
 	}
 }
 
